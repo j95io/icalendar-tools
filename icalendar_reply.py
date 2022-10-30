@@ -87,7 +87,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
                         prog = 'icalendar_reply.py',
                         description = description,
-                        epilog = 'https://github.com/j95io/icalendar_reply')
+                        epilog = 'https://github.com/j95io/icalendar-tools')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument(dest='action', choices=['accept','decline','tentative', 'query'])
