@@ -23,14 +23,14 @@ Use `icalendar_reply.py` to generate a reply to a calendar invitation in iCalend
 ### Usage
 
 ```
-python icalendar_reply.py [-h] [-v] -e MY_EMAIL_ADDRESSES {accept,decline,tentative,query} invitation_filename
+python icalendar_reply.py [-h] [-v] -e MY_EMAIL_ADDRESSES {accepted,declined,tentative,delegated,query} invitation_filename
 ```
 
 __Examples:__
 
 ```python icalendar_reply.py --help``` 
 
-```python icalendar_reply.py -e me@mail.com accept invite.ics``` 
+```python icalendar_reply.py -e me@mail.com accepted invite.ics``` 
 
 ```python icalendar_reply.py -e me@mail.com,also_me@email.org tentative invite.ics``` 
 
