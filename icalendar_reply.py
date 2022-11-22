@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import datetime
 import sys
 
 try:
@@ -15,6 +16,19 @@ With this tool you can do the following with an iCalendar (ics) invitation file:
 Generate a reply in ics format OR query to see if a reply is being demanded from you.
 """
 
+parser = argparse.ArgumentParser(
+                    prog = 'icalendar_reply.py',
+                    description = description,
+                    epilog = 'https://github.com/j95io/icalendar-tools')
+
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument(dest='action', choices=['accepted','declined','tentative', 'delegated', 'query'])
+parser.add_argument('invitation_filename', help='Name of the file containing the event in iCalendar (ics) format')
+parser.add_argument('-e', '--my_email_addresses', dest='my_email_addresses',
+                    help="Your email address or multiple of your email adresses separated by ','", required=True)
+
+
+
 def get_event(calendar):
     events = [sc for sc in calendar.subcomponents if type(sc) == icalendar.cal.Event]
     match len(events):
@@ -27,17 +41,15 @@ def get_event(calendar):
             logging.error("More than one VEVENT found in the calendar file!")
             sys.exit(1)
 
-
 def edit_attendee_status(attendee, action):
     attendee.params.pop('RSVP')
-    if 'ROLE' in attendee.params:
-        attendee.params.pop('ROLE')
     attendee.params['PARTSTAT'] = action
     return attendee
 
 
 def get_attendees(event):
     if 'ATTENDEE' not in event:
+        logging.warning('No attendees found in the event!')
         return []
     attendees = event['ATTENDEE']
     if type(attendees) != list:  # "If only one attendee in invitation file"
@@ -69,31 +81,37 @@ def is_reply_necessary(calendar, my_email_addresses):
     me_as_an_attendee = get_me_as_an_attendee(get_attendees(event), my_email_addresses)
 
     if me_as_an_attendee is None:
-        logging.error("I'm not listed as an attendee of the event. A reply is not being demanded from me.")
+        logging.error("I'm not listed as an attendee of the event."\
+                     +"A reply is not being demanded from me.")
         return False
     if str(me_as_an_attendee.params.get('RSVP')).upper() == 'FALSE':
-        logging.error("I'm listed as an attendee, but not asked to reply (no RSVP)")
+        logging.info("I'm listed as an attendee, but not asked to reply (no RSVP)")
         return False
     if str(me_as_an_attendee.params.get('PARTSTAT')).upper() != 'NEEDS-ACTION':
-        logging.error("'PARTSTAT' is not set to 'NEEDS-ACTION'...  Have I already accepted?")
+        logging.warning("'PARTSTAT' is not set to 'NEEDS-ACTION'...  Have I already accepted?")
         return False
 
     logging.info("I'm listed as an attendee and I am asked to reply (RSVP)")
     return True
 
+def add_reply_to_calendar(calendar, my_email_addresses, action):
+
+    calendar['METHOD'] = 'REPLY'
+    calendar['PRODID'] = 'j95.io'  # Replacing this to make sure recipient (e.g. google/microsoft) doesn't try (and fail) to handle RSVP internally
+    event = get_event(calendar)
+    me_as_an_attendee = get_me_as_an_attendee(get_attendees(event), my_email_addresses)
+    # Make the reply have *only my own* updated attendee information
+    event['ATTENDEE'] = edit_attendee_status(me_as_an_attendee, action)
+
+    ts = datetime.datetime.utcnow().replace(microsecond=0).isoformat()\
+         .replace(':','').replace('-','') + 'Z'  # e.g. 20221122T000840Z
+    event['LAST-MODIFIED'] = ts
+    event['DTSTAMP'] = ts
+
+    return calendar
+
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(
-                        prog = 'icalendar_reply.py',
-                        description = description,
-                        epilog = 'https://github.com/j95io/icalendar-tools')
-
-    parser.add_argument('-v', '--verbose', action='store_true')
-    parser.add_argument(dest='action', choices=['accept','decline','tentative', 'query'])
-    parser.add_argument('invitation_filename', help='Name of the file containing the event in iCalendar (ics) format')
-    parser.add_argument('-e', '--my_email_addresses', dest='my_email_addresses',
-                        help="Your email address or multiple of your email adresses separated by ','", required=True)
 
     args = parser.parse_args()
 
@@ -104,6 +122,7 @@ if __name__ == '__main__':
     my_email_addresses = [e for e in args.my_email_addresses.split(',') if e]
     action = args.action.upper()
 
+    # Open the file
     with open(args.invitation_filename, 'rb') as f:
         calendar = icalendar.Calendar.from_ical(f.read())
 
@@ -112,15 +131,5 @@ if __name__ == '__main__':
     elif action == 'QUERY':
         sys.exit(0)
 
-    # Return a reply with *only my own* updated attendee information
-    calendar['METHOD'] = 'REPLY'
-    event = get_event(calendar)
-    me_as_an_attendee = get_me_as_an_attendee(get_attendees(event), my_email_addresses)
-    event['ATTENDEE'] = edit_attendee_status(me_as_an_attendee, action)
-
+    calendar = add_reply_to_calendar(calendar, my_email_addresses, action)
     sys.stdout.write(str(calendar.to_ical().decode('utf-8')))
-
-else:
-    print("This should only be used as a standalone script", file=sys.stderr)
-    sys.exit(1)
-
